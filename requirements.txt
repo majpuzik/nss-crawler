@@ -1,0 +1,13 @@
+# NSS Crawler - Python závislosti
+
+# Web scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# PDF zpracování
+PyPDF2>=3.0.0
+reportlab>=4.0.0
+
+# Elasticsearch (volitelné)
+# elasticsearch>=8.11.0
