@@ -10,10 +10,15 @@ from pathlib import Path
 DEBUG_MODE = False  # True = testovací režim s mock daty, False = produkce
 MAX_RESULTS_PER_KEYWORD = 100  # Maximální výsledků na klíčové slovo
 
-# Klíčová slova pro vyhledávání (pro první test jen jedno)
+# Klíčová slova pro vyhledávání
 KEYWORDS = [
     "územní plán"
 ]
+
+# Multi-source crawling
+ENABLE_NSS = True  # Nejvyšší správní soud (xlsx)
+ENABLE_SUPREME_COURT = True  # Nejvyšší soud (Selenium)
+ENABLE_REGIONAL_COURTS = True  # Krajské soudy (Selenium)
 
 # Cesty k adresářům
 BASE_PATH = Path(__file__).parent

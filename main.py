@@ -12,7 +12,9 @@ from pathlib import Path
 # Import modulů
 from models import Decision, CrawlerStats
 from config import *
-from search_nss import search_decisions
+from search_nss import search_decisions as search_nss
+from supreme_court import search_decisions as search_supreme_court
+from regional_courts import search_all_courts as search_regional_courts
 from download_nss import download_decisions
 from convert_ocr import convert_decisions
 from indexer import index_decisions
@@ -76,9 +78,9 @@ class NSSCrawler:
         return self.stats
 
     def _search_phase(self):
-        """Fáze 1: Vyhledávání"""
+        """Fáze 1: Vyhledávání - multi-source"""
         logger.info("\n" + "=" * 60)
-        logger.info("📍 FÁZE 1: VYHLEDÁVÁNÍ")
+        logger.info("📍 FÁZE 1: MULTI-SOURCE VYHLEDÁVÁNÍ")
         logger.info("=" * 60)
 
         logger.info(f"🔍 Klíčová slova: {', '.join(KEYWORDS)}")
@@ -86,20 +88,56 @@ class NSSCrawler:
 
         if DEBUG_MODE:
             logger.warning("⚠️  DEBUG MODE - Používám mock data")
-            decisions = self._create_mock_decisions()
-        else:
-            logger.info("🌐 Crawling NSS webu...")
+            return self._create_mock_decisions()
+
+        all_decisions = []
+
+        # 1. Nejvyšší správní soud (NSS) - xlsx data
+        if ENABLE_NSS:
+            logger.info("\n🏛️  Zdroj 1: Nejvyšší správní soud (NSS)")
             try:
-                decisions = search_decisions(KEYWORDS, MAX_RESULTS_PER_KEYWORD)
+                nss_decisions = search_nss(KEYWORDS, MAX_RESULTS_PER_KEYWORD)
+                all_decisions.extend(nss_decisions)
+                logger.info(f"   ✅ NSS: {len(nss_decisions)} rozhodnutí")
             except Exception as e:
-                logger.error(f"❌ Chyba při vyhledávání: {e}")
+                logger.error(f"   ❌ NSS chyba: {e}")
                 self.stats.errors += 1
-                return []
 
-        self.stats.decisions_found = len(decisions)
-        logger.info(f"✅ Nalezeno: {len(decisions)} rozhodnutí")
+        # 2. Nejvyšší soud (NS)
+        if ENABLE_SUPREME_COURT:
+            logger.info("\n🏛️  Zdroj 2: Nejvyšší soud (NS)")
+            try:
+                ns_decisions = search_supreme_court(KEYWORDS, MAX_RESULTS_PER_KEYWORD)
+                all_decisions.extend(ns_decisions)
+                logger.info(f"   ✅ NS: {len(ns_decisions)} rozhodnutí")
+            except Exception as e:
+                logger.error(f"   ❌ NS chyba: {e}")
+                self.stats.errors += 1
 
-        return decisions
+        # 3. Krajské soudy
+        if ENABLE_REGIONAL_COURTS:
+            logger.info("\n🏛️  Zdroj 3: Krajské soudy")
+            try:
+                regional_decisions = search_regional_courts(KEYWORDS, max_results_per_court=10)
+                all_decisions.extend(regional_decisions)
+                logger.info(f"   ✅ Krajské: {len(regional_decisions)} rozhodnutí")
+            except Exception as e:
+                logger.error(f"   ❌ Krajské soudy chyba: {e}")
+                self.stats.errors += 1
+
+        # Deduplikace podle ECLI
+        unique_decisions = {}
+        for decision in all_decisions:
+            if decision.ecli not in unique_decisions:
+                unique_decisions[decision.ecli] = decision
+
+        final_decisions = list(unique_decisions.values())
+        self.stats.decisions_found = len(final_decisions)
+
+        logger.info(f"\n✅ Celkem nalezeno: {len(final_decisions)} unikátních rozhodnutí")
+        logger.info(f"   (Odstraněno {len(all_decisions) - len(final_decisions)} duplikátů)")
+
+        return final_decisions
 
     def _download_phase(self, decisions):
         """Fáze 2: Stahování"""
