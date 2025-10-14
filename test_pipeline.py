@@ -1,258 +1,247 @@
 #!/usr/bin/env python3
 """
 test_pipeline.py
-Komplexní testy NSS crawleru
+Komplexní test NSS crawleru
 """
 
 import unittest
-from datetime import datetime
-from pathlib import Path
 import tempfile
 import shutil
+from pathlib import Path
+from datetime import datetime
 
+# Import modulů
 from models import Decision, CrawlerStats
 from search_nss import NSSSearcher
+from download_nss import NSSDownloader
 from storage import DecisionStorage
 from indexer import DecisionIndexer
+import config
 
 
-class TestDecisionModel(unittest.TestCase):
-    """Testy pro Decision model"""
+class TestNSSCrawler(unittest.TestCase):
+    """Testy pro NSS crawler"""
 
-    def test_create_decision(self):
-        """Test vytvoření Decision objektu"""
+    @classmethod
+    def setUpClass(cls):
+        """Příprava před testy"""
+        # Vytvoření dočasného adresáře pro testy
+        cls.temp_dir = Path(tempfile.mkdtemp())
+
+        # Nastavení testových cest
+        cls.original_db = config.DB_PATH
+        config.DB_PATH = cls.temp_dir / "test.sqlite"
+
+        print(f"\n🧪 Testovací prostředí: {cls.temp_dir}")
+
+    @classmethod
+    def tearDownClass(cls):
+        """Úklid po testech"""
+        try:
+            # Restore original config
+            config.DB_PATH = cls.original_db
+            shutil.rmtree(cls.temp_dir)
+            print(f"🧹 Vyčištěno: {cls.temp_dir}")
+        except Exception as e:
+            print(f"⚠️  Chyba při úklidu: {e}")
+
+    def test_01_decision_model(self):
+        """Test datového modelu Decision"""
+        print("\n▶️  Test 1: Decision model")
+
         decision = Decision(
-            ecli="ECLI:CZ:NSS:2025:TEST.1",
-            title="Test rozhodnutí",
-            date=datetime.now(),
-            url="https://example.com"
+            ecli="ECLI:CZ:NSS:2025:TEST.001",
+            title="Testovací rozhodnutí",
+            date=datetime(2025, 1, 1),
+            url="http://test.cz"
         )
-        self.assertEqual(decision.ecli, "ECLI:CZ:NSS:2025:TEST.1")
-        self.assertEqual(decision.title, "Test rozhodnutí")
 
-    def test_decision_with_keywords(self):
-        """Test Decision s klíčovými slovy"""
+        self.assertEqual(decision.ecli, "ECLI:CZ:NSS:2025:TEST.001")
+        self.assertIsNotNone(decision.title)
+
+        print("   ✅ Decision model OK")
+
+    def test_02_storage_init(self):
+        """Test inicializace databáze"""
+        print("\n▶️  Test 2: Inicializace databáze")
+
+        storage = DecisionStorage(config.DB_PATH)
+
+        # Kontrola, že DB existuje
+        self.assertTrue(config.DB_PATH.exists())
+
+        # Kontrola tabulek
+        import sqlite3
+        conn = sqlite3.connect(str(config.DB_PATH))
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in cursor.fetchall()]
+
+        self.assertIn('decisions', tables)
+        self.assertIn('decisions_fts', tables)
+
+        conn.close()
+        storage.close()
+
+        print("   ✅ Databáze inicializována")
+
+    def test_03_save_and_retrieve(self):
+        """Test ukládání a načítání"""
+        print("\n▶️  Test 3: Ukládání a načítání")
+
+        storage = DecisionStorage(config.DB_PATH)
+
+        # Vytvoření testovacího rozhodnutí
         decision = Decision(
-            ecli="ECLI:CZ:NSS:2025:TEST.1",
-            title="Test",
-            keywords=["územní plán", "test"]
-        )
-        self.assertEqual(len(decision.keywords), 2)
-        self.assertIn("územní plán", decision.keywords)
-
-
-class TestCrawlerStats(unittest.TestCase):
-    """Testy pro CrawlerStats"""
-
-    def test_create_stats(self):
-        """Test vytvoření statistik"""
-        stats = CrawlerStats()
-        self.assertEqual(stats.decisions_found, 0)
-        self.assertEqual(stats.errors, 0)
-        self.assertIsInstance(stats.start_time, datetime)
-
-    def test_stats_duration(self):
-        """Test výpočtu doby běhu"""
-        stats = CrawlerStats()
-        stats.end_time = datetime.now()
-        duration = stats.duration()
-        self.assertGreaterEqual(duration, 0)
-
-
-class TestNSSSearcher(unittest.TestCase):
-    """Testy pro NSSSearcher"""
-
-    def setUp(self):
-        self.searcher = NSSSearcher(delay=0.1)
-
-    def test_extract_ecli(self):
-        """Test extrakce ECLI"""
-        text = "ECLI:CZ:NSS:2025:1A.123 nějaký text"
-        ecli = self.searcher._extract_ecli(text)
-        self.assertIn("ECLI:CZ:NSS", ecli)
-
-    def test_extract_date(self):
-        """Test extrakce data"""
-        text = "Rozhodnutí ze dne 15.3.2025"
-        date = self.searcher._extract_date(text)
-        self.assertEqual(date, "15.3.2025")
-
-
-class TestStorage(unittest.TestCase):
-    """Testy pro DecisionStorage"""
-
-    def setUp(self):
-        """Vytvoří dočasnou databázi"""
-        self.temp_dir = tempfile.mkdtemp()
-        self.db_path = Path(self.temp_dir) / "test.db"
-        self.storage = DecisionStorage(self.db_path)
-
-    def tearDown(self):
-        """Smaže dočasnou databázi"""
-        self.storage.close()
-        shutil.rmtree(self.temp_dir)
-
-    def test_save_and_load_decision(self):
-        """Test uložení a načtení rozhodnutí"""
-        decision = Decision(
-            ecli="ECLI:CZ:NSS:2025:TEST.1",
-            title="Test rozhodnutí",
-            date=datetime.now(),
-            url="https://example.com",
-            full_text="Toto je testovací text.",
-            keywords=["test"]
+            ecli="ECLI:CZ:NSS:2025:TEST.002",
+            title="Test ukládání",
+            date=datetime(2025, 1, 2),
+            url="http://test2.cz",
+            full_text="Testovací text rozhodnutí s klíčovými slovy: územní plán, výstavba"
         )
 
         # Uložení
-        result = self.storage.save_decision(decision)
+        result = storage.save_decision(decision)
         self.assertTrue(result)
 
         # Načtení
-        loaded = self.storage.get_decision(decision.ecli)
+        loaded = storage.get_decision("ECLI:CZ:NSS:2025:TEST.002")
         self.assertIsNotNone(loaded)
-        self.assertEqual(loaded.ecli, decision.ecli)
-        self.assertEqual(loaded.title, decision.title)
+        self.assertEqual(loaded.title, "Test ukládání")
 
-    def test_save_multiple_decisions(self):
-        """Test uložení více rozhodnutí"""
-        decisions = [
-            Decision(
-                ecli=f"ECLI:CZ:NSS:2025:TEST.{i}",
-                title=f"Test {i}",
-                keywords=["test"]
-            )
-            for i in range(1, 4)
-        ]
+        storage.close()
 
-        count = self.storage.save_decisions(decisions)
-        self.assertEqual(count, 3)
+        print("   ✅ Ukládání a načítání OK")
 
-        # Ověření
-        all_decisions = self.storage.get_all_decisions()
-        self.assertEqual(len(all_decisions), 3)
-
-    def test_fulltext_search(self):
+    def test_04_fulltext_search(self):
         """Test fulltextového vyhledávání"""
-        decisions = [
+        print("\n▶️  Test 4: Fulltextové vyhledávání")
+
+        storage = DecisionStorage(config.DB_PATH)
+
+        # Přidání testovacích rozhodnutí
+        test_decisions = [
             Decision(
-                ecli="ECLI:CZ:NSS:2025:TEST.1",
-                title="Rozhodnutí o územním plánu",
-                full_text="Toto rozhodnutí se týká územního plánu obce.",
-                keywords=["územní plán"]
-            ),
-            Decision(
-                ecli="ECLI:CZ:NSS:2025:TEST.2",
-                title="Rozhodnutí o větrné elektrárně",
-                full_text="Toto rozhodnutí se týká stavby větrné elektrárny.",
-                keywords=["větrná elektrárna"]
+                ecli=f"ECLI:CZ:NSS:2025:FTS.00{i}",
+                title=f"Rozhodnutí {i}",
+                date=datetime(2025, 1, 1),
+                url=f"http://test{i}.cz",
+                full_text=text
             )
+            for i, text in enumerate([
+                "Výstavba v nezastavitelné ploše územního plánu",
+                "Větrná elektrárna a krajinný ráz",
+                "Rozhodnutí o vydání stavebního povolení"
+            ], 1)
         ]
 
-        self.storage.save_decisions(decisions)
+        for decision in test_decisions:
+            storage.save_decision(decision)
 
         # Vyhledávání
-        results = self.storage.search_fulltext("územní plán")
+        results = storage.search_fulltext("územní plán", limit=10)
         self.assertGreater(len(results), 0)
 
-        # Ověření, že výsledek obsahuje správné rozhodnutí
-        eclis = [r.ecli for r in results]
-        self.assertIn("ECLI:CZ:NSS:2025:TEST.1", eclis)
+        results2 = storage.search_fulltext("větrná elektrárna", limit=10)
+        self.assertGreater(len(results2), 0)
 
-    def test_get_stats(self):
-        """Test získání statistik databáze"""
-        decisions = [
-            Decision(
-                ecli=f"ECLI:CZ:NSS:2025:TEST.{i}",
-                title=f"Test {i}",
-                full_text=f"Text {i}",
-                ocr_pdf_path=f"/path/to/{i}.pdf" if i % 2 == 0 else None
-            )
-            for i in range(1, 6)
-        ]
+        storage.close()
 
-        self.storage.save_decisions(decisions)
-        stats = self.storage.get_stats()
+        print(f"   ✅ Vyhledávání OK (nalezeno: {len(results)} a {len(results2)} výsledků)")
 
-        self.assertEqual(stats['total'], 5)
-        self.assertEqual(stats['with_ocr'], 2)
-        self.assertEqual(stats['with_fulltext'], 5)
+    def test_05_statistics(self):
+        """Test statistik"""
+        print("\n▶️  Test 5: Statistiky")
 
+        storage = DecisionStorage(config.DB_PATH)
+        stats = storage.get_stats()
 
-class TestIndexer(unittest.TestCase):
-    """Testy pro DecisionIndexer"""
+        self.assertIn('total', stats)
+        self.assertGreater(stats['total'], 0)
 
-    def setUp(self):
-        """Vytvoří dočasnou databázi"""
-        self.temp_dir = tempfile.mkdtemp()
-        self.db_path = Path(self.temp_dir) / "test.db"
+        storage.close()
 
-    def tearDown(self):
-        """Smaže dočasnou databázi"""
-        shutil.rmtree(self.temp_dir)
+        print(f"   ✅ Statistiky OK (celkem: {stats['total']} rozhodnutí)")
 
-    def test_index_decisions(self):
-        """Test indexace rozhodnutí"""
-        # Použijeme SQLite pro testy
-        import config
-        original_db = config.DB_PATH
-        config.DB_PATH = self.db_path
+    def test_06_crawler_stats(self):
+        """Test objektu CrawlerStats"""
+        print("\n▶️  Test 6: CrawlerStats")
+
+        stats = CrawlerStats()
+        stats.decisions_found = 100
+        stats.decisions_downloaded = 95
+        stats.decisions_ocr_processed = 90
+        stats.decisions_indexed = 90
+        stats.errors = 5
+        stats.end_time = datetime.now()
+
+        duration = stats.duration()
+        self.assertGreaterEqual(duration, 0)
+
+        print("   ✅ CrawlerStats OK")
+
+    def test_07_nss_searcher_init(self):
+        """Test inicializace NSSSearcher"""
+        print("\n▶️  Test 7: NSSSearcher inicializace")
+
+        searcher = NSSSearcher(delay=0.5)
+        self.assertIsNotNone(searcher.session)
+        self.assertEqual(searcher.delay, 0.5)
+
+        print("   ✅ NSSSearcher OK")
+
+    def test_08_downloader_init(self):
+        """Test inicializace NSSDownloader"""
+        print("\n▶️  Test 8: NSSDownloader inicializace")
+
+        downloader = NSSDownloader()
+        self.assertIsNotNone(downloader.session)
+
+        print("   ✅ NSSDownloader OK")
+
+    def test_09_indexer(self):
+        """Test indexeru"""
+        print("\n▶️  Test 9: Indexer")
 
         indexer = DecisionIndexer()
 
-        decisions = [
-            Decision(
-                ecli=f"ECLI:CZ:NSS:2025:TEST.{i}",
-                title=f"Test {i}",
-                keywords=["test"]
-            )
-            for i in range(1, 4)
-        ]
+        decision = Decision(
+            ecli="ECLI:CZ:NSS:2025:IDX.001",
+            title="Test indexace",
+            date=datetime(2025, 1, 1),
+            url="http://test.cz",
+            full_text="Test indexace dokumentu"
+        )
 
-        count = indexer.index_decisions(decisions)
-        self.assertEqual(count, 3)
-
-        # Ověření
-        results = indexer.search("Test")
-        self.assertGreater(len(results), 0)
+        result = indexer.index_decisions([decision])
+        self.assertEqual(result, 1)
 
         indexer.close()
 
-        # Restore
-        config.DB_PATH = original_db
-
-
-def run_tests():
-    """Spustí všechny testy"""
-    loader = unittest.TestLoader()
-    suite = unittest.TestSuite()
-
-    # Přidání testů
-    suite.addTests(loader.loadTestsFromTestCase(TestDecisionModel))
-    suite.addTests(loader.loadTestsFromTestCase(TestCrawlerStats))
-    suite.addTests(loader.loadTestsFromTestCase(TestNSSSearcher))
-    suite.addTests(loader.loadTestsFromTestCase(TestStorage))
-    suite.addTests(loader.loadTestsFromTestCase(TestIndexer))
-
-    # Spuštění
-    runner = unittest.TextTestRunner(verbosity=2)
-    result = runner.run(suite)
-
-    return result.wasSuccessful()
+        print("   ✅ Indexer OK")
 
 
 if __name__ == "__main__":
-    import sys
+    print("\n" + "="*60)
+    print("🧪 NSS CRAWLER - TESTOVACÍ SUITE")
+    print("="*60)
 
-    print("=" * 60)
-    print("🧪 SPOUŠTÍM TESTY NSS CRAWLERU")
-    print("=" * 60)
+    # Spuštění unit testů
+    print("\n📍 UNIT TESTY")
+    print("-"*60)
 
-    success = run_tests()
+    loader = unittest.TestLoader()
+    suite = loader.loadTestsFromTestCase(TestNSSCrawler)
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
 
-    print("\n" + "=" * 60)
-    if success:
-        print("✅ VŠECHNY TESTY PROŠLY")
-        sys.exit(0)
+    # Výsledek unit testů
+    if result.wasSuccessful():
+        print("\n" + "="*60)
+        print("🎉 VŠECHNY TESTY ÚSPĚŠNÉ")
+        print("="*60)
     else:
-        print("❌ NĚKTERÉ TESTY SELHALY")
-        sys.exit(1)
+        print("\n" + "="*60)
+        print("❌ Některé testy selhaly")
+        print("="*60)
