@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 main.py
-Hlavní orchestrátor NSS crawleru - zjednodušená demonstrační verze
+Hlavní orchestrátor NSS crawleru - plná verze
 """
 
 import logging
@@ -12,6 +12,10 @@ from pathlib import Path
 # Import modulů
 from models import Decision, CrawlerStats
 from config import *
+from search_nss import search_decisions
+from download_nss import download_decisions
+from convert_ocr import convert_decisions
+from indexer import index_decisions
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,34 +29,46 @@ class NSSCrawler:
 
     def __init__(self):
         self.stats = CrawlerStats()
-        logger.info("Crawler inicializován")
+        self.decisions = []
+        logger.info("✅ Crawler inicializován")
 
     def run(self) -> CrawlerStats:
         """Spustí celý crawler pipeline"""
-        logger.info("="*60)
+        logger.info("=" * 60)
         logger.info("🚀 SPOUŠTÍM NSS CRAWLER")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
         try:
             # Fáze 1: Vyhledávání
-            self._search_phase()
+            self.decisions = self._search_phase()
+
+            if not self.decisions:
+                logger.warning("⚠️  Žádná rozhodnutí nenalezena")
+                return self.stats
 
             # Fáze 2: Stahování
-            self._download_phase()
+            self.decisions = self._download_phase(self.decisions)
+
+            if not self.decisions:
+                logger.warning("⚠️  Žádná PDF nestažena")
+                return self.stats
 
             # Fáze 3: OCR zpracování
-            self._ocr_phase()
+            self.decisions = self._ocr_phase(self.decisions)
+
+            if not self.decisions:
+                logger.warning("⚠️  Žádná OCR nezpracována")
+                return self.stats
 
             # Fáze 4: Indexace
-            self._index_phase()
+            self._index_phase(self.decisions)
 
-            # Fáze 5: Export
-            self._export_phase()
-
-        except Exception as e:
-            logger.error(f"Kritická chyba: {e}")
+        except KeyboardInterrupt:
+            logger.warning("\n⚠️  Přerušeno uživatelem")
             self.stats.errors += 1
-
+        except Exception as e:
+            logger.error(f"❌ Kritická chyba: {e}", exc_info=True)
+            self.stats.errors += 1
         finally:
             self.stats.end_time = datetime.now()
             self._print_final_stats()
@@ -61,71 +77,88 @@ class NSSCrawler:
 
     def _search_phase(self):
         """Fáze 1: Vyhledávání"""
-        logger.info("\n" + "="*60)
+        logger.info("\n" + "=" * 60)
         logger.info("📍 FÁZE 1: VYHLEDÁVÁNÍ")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
-        logger.info(f"Klíčová slova: {', '.join(KEYWORDS)}")
-        logger.info(f"Max výsledků na klíčové slovo: {MAX_RESULTS_PER_KEYWORD}")
+        logger.info(f"🔍 Klíčová slova: {', '.join(KEYWORDS)}")
+        logger.info(f"🔢 Max výsledků na slovo: {MAX_RESULTS_PER_KEYWORD}")
 
         if DEBUG_MODE:
             logger.warning("⚠️  DEBUG MODE - Používám mock data")
-            # Simulace nalezení rozhodnutí
-            mock_decisions = [
-                Decision(
-                    ecli=f"ECLI:CZ:NSS:2025:TEST.{i}",
-                    title=f"Testovací rozhodnutí {i}",
-                    date=datetime.now(),
-                    url=f"https://example.com/{i}",
-                    keywords=KEYWORDS[:1]
-                )
-                for i in range(5)
-            ]
-            self.stats.decisions_found = len(mock_decisions)
-            logger.info(f"✅ Nalezeno {len(mock_decisions)} rozhodnutí (MOCK)")
+            decisions = self._create_mock_decisions()
         else:
             logger.info("🌐 Crawling NSS webu...")
-            logger.warning("⚠️  Pro plnou funkčnost implementujte search_nss.py")
-            self.stats.decisions_found = 0
+            try:
+                decisions = search_decisions(KEYWORDS, MAX_RESULTS_PER_KEYWORD)
+            except Exception as e:
+                logger.error(f"❌ Chyba při vyhledávání: {e}")
+                self.stats.errors += 1
+                return []
 
-    def _download_phase(self):
+        self.stats.decisions_found = len(decisions)
+        logger.info(f"✅ Nalezeno: {len(decisions)} rozhodnutí")
+
+        return decisions
+
+    def _download_phase(self, decisions):
         """Fáze 2: Stahování"""
-        logger.info("\n" + "="*60)
+        logger.info("\n" + "=" * 60)
         logger.info("📍 FÁZE 2: STAHOVÁNÍ")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
-        if self.stats.decisions_found > 0:
-            logger.info(f"📥 Stahuji {self.stats.decisions_found} rozhodnutí...")
-            logger.info(f"⚙️  Paralelizace: {MAX_WORKERS_DOWNLOAD} vláken")
-            self.stats.decisions_downloaded = self.stats.decisions_found
-            logger.info("✅ Stahování dokončeno")
-        else:
-            logger.info("⏭️  Přeskakuji - žádná rozhodnutí k stažení")
+        logger.info(f"📥 Stahuji {len(decisions)} PDF...")
+        logger.info(f"⚙️  Paralelizace: {MAX_WORKERS_DOWNLOAD} vláken")
 
-    def _ocr_phase(self):
+        if DEBUG_MODE:
+            logger.warning("⚠️  DEBUG MODE - Přeskakuji stahování")
+            self.stats.decisions_downloaded = len(decisions)
+            return decisions
+
+        try:
+            downloaded = download_decisions(decisions, MAX_WORKERS_DOWNLOAD)
+            self.stats.decisions_downloaded = len(downloaded)
+            logger.info(f"✅ Staženo: {len(downloaded)} PDF")
+            return downloaded
+        except Exception as e:
+            logger.error(f"❌ Chyba při stahování: {e}")
+            self.stats.errors += 1
+            return []
+
+    def _ocr_phase(self, decisions):
         """Fáze 3: OCR zpracování"""
-        logger.info("\n" + "="*60)
+        logger.info("\n" + "=" * 60)
         logger.info("📍 FÁZE 3: OCR ZPRACOVÁNÍ")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
-        if PDF_OCR_ENABLED:
-            logger.info(f"🔍 OCR jazyk: {OCR_LANGUAGE}")
-            logger.info(f"⚙️  Paralelizace: {MAX_WORKERS_OCR} procesů")
-
-            if self.stats.decisions_downloaded > 0:
-                logger.info(f"📝 Zpracovávám {self.stats.decisions_downloaded} PDF...")
-                self.stats.decisions_ocr_processed = self.stats.decisions_downloaded
-                logger.info("✅ OCR dokončeno")
-            else:
-                logger.info("⏭️  Přeskakuji - žádné PDF k zpracování")
-        else:
+        if not PDF_OCR_ENABLED:
             logger.warning("⚠️  OCR vypnuto")
+            return decisions
 
-    def _index_phase(self):
+        logger.info(f"🔍 OCR jazyk: {OCR_LANGUAGE}")
+        logger.info(f"⚙️  Paralelizace: {MAX_WORKERS_OCR} procesů")
+        logger.info(f"📝 Zpracovávám {len(decisions)} PDF...")
+
+        if DEBUG_MODE:
+            logger.warning("⚠️  DEBUG MODE - Přeskakuji OCR")
+            self.stats.decisions_ocr_processed = len(decisions)
+            return decisions
+
+        try:
+            processed = convert_decisions(decisions, MAX_WORKERS_OCR)
+            self.stats.decisions_ocr_processed = len(processed)
+            logger.info(f"✅ Zpracováno: {len(processed)} PDF")
+            return processed
+        except Exception as e:
+            logger.error(f"❌ Chyba při OCR: {e}")
+            self.stats.errors += 1
+            return []
+
+    def _index_phase(self, decisions):
         """Fáze 4: Indexace"""
-        logger.info("\n" + "="*60)
+        logger.info("\n" + "=" * 60)
         logger.info("📍 FÁZE 4: INDEXACE")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
         if USE_ELASTICSEARCH:
             logger.info(f"🔍 Elasticsearch: {ELASTICSEARCH_HOST}:{ELASTICSEARCH_PORT}")
@@ -133,37 +166,37 @@ class NSSCrawler:
         else:
             logger.info(f"🗄️  SQLite databáze: {DB_PATH}")
 
-        if self.stats.decisions_ocr_processed > 0:
-            logger.info(f"📇 Indexuji {self.stats.decisions_ocr_processed} rozhodnutí...")
-            self.stats.decisions_indexed = self.stats.decisions_ocr_processed
-            logger.info("✅ Indexace dokončena")
-        else:
-            logger.info("⏭️  Přeskakuji - žádná rozhodnutí k indexaci")
+        logger.info(f"📇 Indexuji {len(decisions)} rozhodnutí...")
 
-    def _export_phase(self):
-        """Fáze 5: Export (POVINNÁ)"""
-        logger.info("\n" + "="*60)
-        logger.info("📍 FÁZE 5: EXPORT (POVINNÝ)")
-        logger.info("="*60)
+        try:
+            count = index_decisions(decisions)
+            self.stats.decisions_indexed = count
+            logger.info(f"✅ Indexováno: {count} rozhodnutí")
+        except Exception as e:
+            logger.error(f"❌ Chyba při indexaci: {e}")
+            self.stats.errors += 1
 
-        logger.info(f"📦 Export formát: {EXPORT_FORMAT}")
-        logger.info(f"📄 Jeden soubor: {EXPORT_SINGLE_FILE}")
-        logger.info(f"🗂️  Metadata: {EXPORT_METADATA}")
-
-        if self.stats.decisions_indexed > 0:
-            export_file = EXPORT_PATH / f"nss_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-            logger.info(f"💾 Export do: {export_file}")
-            logger.info("✅ Export dokončen")
-        else:
-            logger.info("⏭️  Přeskakuji - žádná rozhodnutí k exportu")
+    def _create_mock_decisions(self):
+        """Vytvoří mock data pro testování"""
+        mock_decisions = [
+            Decision(
+                ecli=f"ECLI:CZ:NSS:2025:TEST.{i}",
+                title=f"Testovací rozhodnutí {i}: {KEYWORDS[i % len(KEYWORDS)]}",
+                date=datetime.now(),
+                url=f"https://example.com/{i}",
+                keywords=[KEYWORDS[i % len(KEYWORDS)]]
+            )
+            for i in range(1, 6)
+        ]
+        return mock_decisions
 
     def _print_final_stats(self):
         """Vypíše finální statistiky"""
-        logger.info("\n" + "="*60)
+        logger.info("\n" + "=" * 60)
         logger.info("📊 FINÁLNÍ STATISTIKY")
-        logger.info("="*60)
+        logger.info("=" * 60)
         logger.info(self.stats)
-        logger.info("="*60)
+        logger.info("=" * 60)
 
 
 def main():

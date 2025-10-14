@@ -41,20 +41,21 @@ OCR_LANGUAGE = "ces"  # Český jazyk pro Tesseract
 OCR_DPI = 300
 PDF_OCR_ENABLED = True  # POVINNÉ - nelze vypnout
 
-# Export nastavení
-EXPORT_FORMAT = "pdf"  # POVINNÉ
+# Export nastavení (POVINNÉ)
+EXPORT_FORMAT = "pdf"
 EXPORT_METADATA = True
 EXPORT_SINGLE_FILE = True  # True = jeden PDF, False = samostatné soubory
 EXPORT_SEPARATOR_PAGES = True  # Prázdné stránky mezi rozhodnutími
 
-# Elasticsearch
-USE_ELASTICSEARCH = False  # True = použít ES, False = SQLite
+# Databáze
+USE_ELASTICSEARCH = False  # True = Elasticsearch, False = SQLite
 ELASTICSEARCH_HOST = "localhost"
 ELASTICSEARCH_PORT = 9200
 ELASTICSEARCH_INDEX = "nss_decisions"
 
 # NSS URL
 NSS_SEARCH_URL = "https://vyhledavac.nssoud.cz/"
+NSS_BASE_URL = "https://vyhledavac.nssoud.cz"
 
 # Vytvoření adresářů
 for path in [PDF_STORAGE_PATH, PDF_OCR_PATH, EXPORT_PATH, LOG_PATH]:
