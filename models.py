@@ -20,6 +20,7 @@ class Decision:
     ocr_pdf_path: Optional[str] = None
     full_text: Optional[str] = None
     keywords: List[str] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
 
     def __str__(self):
         return f"Decision({self.ecli}, {self.title})"

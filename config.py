@@ -7,14 +7,12 @@ import os
 from pathlib import Path
 
 # Režim běhu
-DEBUG_MODE = True  # True = testovací režim s mock daty
-MAX_RESULTS_PER_KEYWORD = 50  # Maximální výsledků na klíčové slovo
+DEBUG_MODE = False  # True = testovací režim s mock daty, False = produkce
+MAX_RESULTS_PER_KEYWORD = 100  # Maximální výsledků na klíčové slovo
 
-# Klíčová slova pro vyhledávání
+# Klíčová slova pro vyhledávání (pro první test jen jedno)
 KEYWORDS = [
-    "nezastavitelná plocha",
-    "územní plán",
-    "větrná elektrárna"
+    "územní plán"
 ]
 
 # Cesty k adresářům
