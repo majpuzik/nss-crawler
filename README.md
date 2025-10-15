@@ -1,257 +1,104 @@
-# 🏛️ NSS Crawler
+# maj-sbirka - Databáze rozhodnutí NSS
 
-Automatický crawler pro judikaturu Nejvyššího správního soudu ČR s pokročilou funkcionalitou.
+Web aplikace pro stahování a správu rozhodnutí Nejvyššího správního soudu ČR.
 
-## 🎯 Stav projektu
+## 🎯 Funkce
 
-**Verze:** 2.0.0
-**Stav:** ✅ Plně funkční
+- **Web GUI** - Moderní webové rozhraní na http://localhost:5001
+- **Vyhledávání** - Fulltextové vyhledávání v rozhodnutích NSS
+- **Multi-source** - Stahování z NSS sbírky + NSS Open Data
+- **Automatické stahování** - Hromadné stahování plných textů
+- **Job monitoring** - Sledování průběhu stahování v reálném čase
+- **SQLite FTS5** - Rychlé fulltextové vyhledávání
 
-### ✅ Implementováno
+## 📊 Statistiky (k 15.10.2025)
 
-- ✅ Modulární architektura
-- ✅ Web scraping NSS webu (vyhledavac.nssoud.cz)
-- ✅ Paralelní stahování PDF (ThreadPoolExecutor)
-- ✅ OCR konverze (Tesseract, pdf2image)
-- ✅ SQLite databáze s FTS5 (fulltextové vyhledávání)
-- ✅ Kompletní indexace
-- ✅ Komplexní testy (test_pipeline.py)
-- ✅ Konfigurovatelné parametry
-- ✅ Detailní logování
+- **654 rozhodnutí** celkem
+- **165 s plným textem** (25%)
+- **489 zbývá stáhnout** (75%)
 
-## 📦 Struktura projektu
-
-```
-nss-crawler/
-├── main.py              # Hlavní orchestrátor
-├── config.py            # Konfigurace
-├── models.py            # Datové modely
-├── search_nss.py        # Web scraping NSS
-├── download_nss.py      # Paralelní stahování
-├── convert_ocr.py       # OCR konverze
-├── storage.py           # SQLite databáze s FTS5
-├── indexer.py           # Wrapper pro indexaci
-├── test_pipeline.py     # Testy
-├── requirements.txt     # Python závislosti
-└── data/                # Datové adresáře
-    ├── pdf/            # Stažené PDF
-    ├── pdf_ocr/        # PDF s OCR
-    ├── exports/        # Exporty
-    ├── logs/           # Logy
-    └── nss_decisions.db # SQLite databáze
-```
-
-## 🚀 Rychlý start
-
-### 1. Instalace závislostí
+## 🚀 Spuštění
 
 ```bash
-cd /Users/majpuzik/apps/nss-crawler
-python3 -m venv venv
+# Aktivace virtuálního prostředí
 source venv/bin/activate
-pip install -r requirements.txt
+
+# Spuštění web serveru
+python3 web_app.py
+
+# Web rozhraní
+open http://localhost:5001
 ```
 
-### Systémové závislosti (macOS)
+## 📁 Struktura projektu
 
-```bash
-# Tesseract OCR s českým jazykem
-brew install tesseract tesseract-lang
-
-# Poppler pro pdf2image
-brew install poppler
+```
+maj-sbirka/
+├── web_app.py              # Flask web server + REST API
+├── downloader.py           # Selenium scraper pro NSS sbírku
+├── search_nss.py           # Import z NSS Open Data (xlsx)
+├── storage.py              # SQLite databáze + FTS5
+├── job_manager.py          # Správa background jobů
+├── models.py               # Data modely
+├── config.py               # Konfigurace
+├── templates/
+│   └── index.html          # Web GUI (HTML + JS)
+└── data/
+    ├── nss_decisions.db    # SQLite databáze
+    └── pdfs/               # Stažené PDF soubory
 ```
 
-### 2. Konfigurace
+## 🔧 Klíčové komponenty
 
-Edituj `config.py`:
+### REST API Endpointy
 
-```python
-# Režim běhu
-DEBUG_MODE = True  # False pro produkci
+- `GET /` - Web GUI
+- `GET /api/stats` - Statistiky databáze
+- `GET /api/decisions` - Seznam rozhodnutí (paginace, filtry)
+- `POST /api/search_nss` - Vyhledávání v NSS sbírce
+- `POST /api/download_all_without_text` - Hromadné stahování textů
+- `POST /api/download_single` - Stažení jednoho textu
+- `GET /api/jobs` - Seznam běžících jobů
 
-# Klíčová slova
-KEYWORDS = [
-    "nezastavitelná plocha",
-    "územní plán",
-    "větrná elektrárna"
-]
+### Databáze (SQLite + FTS5)
 
-# Limity
-MAX_RESULTS_PER_KEYWORD = 50
-
-# Paralelizace
-MAX_WORKERS_DOWNLOAD = 6  # Počet vláken pro stahování
-MAX_WORKERS_OCR = 2       # Počet procesů pro OCR
+```sql
+CREATE TABLE decisions (
+    id INTEGER PRIMARY KEY,
+    ecli TEXT UNIQUE,
+    title TEXT,
+    date TEXT,
+    url TEXT,
+    full_text TEXT,
+    metadata TEXT -- JSON
+)
 ```
 
-### 3. Spuštění
+### Zdroje dat
 
-```bash
-# Demo režim (mock data)
-python3 main.py
+1. **NSS Sbírka** (sbirka.nssoud.cz) - S plnými texty
+2. **NSS Open Data** (xlsx) - Metadata bez textů
 
-# Produkční režim (reálné stahování)
-# Změň DEBUG_MODE = False v config.py
-python3 main.py
-```
+## 🔍 Použití
 
-### 4. Testy
+### Vyhledávání v NSS sbírce
+1. Zadej klíčová slova (např. "dotace EU")
+2. Nastav limit (10-100)
+3. Klikni "🔍 Vyhledat v NSS"
+4. Sleduj progress bar
 
-```bash
-python3 test_pipeline.py
-```
+### Hromadné stahování textů
+1. Nastav limit (max 200)
+2. Klikni "📥 Stáhnout všechny bez textu"
+3. Sleduj progress a počet stažených
+4. Případně zruš tlačítkem "❌ Zrušit"
 
-## 📊 Pipeline crawleru
+## 🐛 Opravy (15.10.2025)
 
-Crawler má 4 hlavní fáze:
+- ✅ Opraveny statistiky v GUI
+- ✅ Přidána podpora pro URL formát `?q=` 
+- ✅ Hromadné stahování nyní funguje pro všechny zdroje
 
-### 1️⃣ Vyhledávání
-- Crawling NSS webu (vyhledavac.nssoud.cz)
-- Extrakce ECLI, názvu, data, URL
-- Odstranění duplicit
+## 👤 Autor
 
-### 2️⃣ Stahování
-- Paralelní download PDF (ThreadPoolExecutor)
-- Retry mechanika s exponenciálním backoffem
-- Validace stažených PDF
-
-### 3️⃣ OCR zpracování
-- Detekce textu v PDF
-- OCR pro skeny (Tesseract)
-- Vytvoření searchable PDF
-- Paralelní zpracování (ProcessPoolExecutor)
-
-### 4️⃣ Indexace
-- Uložení do SQLite databáze
-- Fulltextová indexace (FTS5)
-- Podpora Elasticsearch (připraveno)
-
-## 🔍 Použití databáze
-
-```python
-from storage import DecisionStorage
-
-# Připojení
-storage = DecisionStorage()
-
-# Fulltextové vyhledávání
-results = storage.search_fulltext("územní plán", limit=10)
-
-for decision in results:
-    print(f"{decision.ecli}: {decision.title}")
-    print(f"Text: {decision.full_text[:100]}...")
-
-# Statistiky
-stats = storage.get_stats()
-print(f"Celkem: {stats['total']} rozhodnutí")
-print(f"S OCR: {stats['with_ocr']}")
-
-storage.close()
-```
-
-## ⚙️ Konfigurace
-
-### Parametry v `config.py`
-
-| Parametr | Popis | Výchozí |
-|----------|-------|---------|
-| `DEBUG_MODE` | Testovací režim | `True` |
-| `MAX_RESULTS_PER_KEYWORD` | Max výsledků na slovo | `50` |
-| `MAX_WORKERS_DOWNLOAD` | Paralelní stahování | `6` |
-| `MAX_WORKERS_OCR` | Paralelní OCR | `2` |
-| `OCR_LANGUAGE` | Jazyk pro Tesseract | `ces` |
-| `OCR_DPI` | DPI pro OCR | `300` |
-| `USE_ELASTICSEARCH` | Použít Elasticsearch | `False` |
-
-### Cesty
-
-| Cesta | Popis |
-|-------|-------|
-| `DATA_PATH` | `data/` |
-| `PDF_STORAGE_PATH` | `data/pdf/` |
-| `PDF_OCR_PATH` | `data/pdf_ocr/` |
-| `DB_PATH` | `data/nss_decisions.db` |
-
-## 🧪 Testování
-
-```bash
-# Spuštění všech testů
-python3 test_pipeline.py
-
-# Test jednotlivých modulů
-python3 search_nss.py
-python3 download_nss.py
-python3 convert_ocr.py
-python3 storage.py
-python3 indexer.py
-```
-
-## 📈 Výkon
-
-### Rychlost
-- **Vyhledávání:** ~2-5s na klíčové slovo
-- **Stahování:** 6 PDF paralelně (~10-30s celkem)
-- **OCR:** 2 PDF paralelně (~30-60s na PDF)
-- **Indexace:** ~0.1s na rozhodnutí
-
-### Doporučení
-- `MAX_WORKERS_DOWNLOAD = 6` (dobrý poměr rychlost/zátěž)
-- `MAX_WORKERS_OCR = 2` (CPU-bound operace)
-- `OCR_DPI = 300` (dobrý poměr kvalita/rychlost)
-
-## 🛠️ Technologie
-
-- **Python 3.9+**
-- **Scraping:** requests, BeautifulSoup4
-- **OCR:** pytesseract, pdf2image
-- **Databáze:** SQLite s FTS5
-- **Paralelizace:** ThreadPoolExecutor, ProcessPoolExecutor
-- **PDF:** PyPDF2, reportlab
-
-## 📝 Formát dat
-
-### Decision objekt
-
-```python
-@dataclass
-class Decision:
-    ecli: str                    # ECLI identifikátor
-    title: str                   # Název rozhodnutí
-    date: Optional[datetime]     # Datum rozhodnutí
-    url: Optional[str]           # URL na NSS webu
-    pdf_path: Optional[str]      # Cesta k originálnímu PDF
-    ocr_pdf_path: Optional[str]  # Cesta k PDF s OCR
-    full_text: Optional[str]     # Plný text z OCR
-    keywords: List[str]          # Klíčová slova
-```
-
-## 🐛 Známé problémy
-
-1. **OCR kvalita:** Závisí na kvalitě skenů v PDF
-2. **Rate limiting:** NSS web může blokovat příliš časté požadavky
-3. **Memory:** OCR velkých PDF může spotřebovat hodně RAM
-
-## 🔮 Plány do budoucna
-
-- [ ] Elasticsearch integrace (připraveno)
-- [ ] Export do PDF (připraveno v config)
-- [ ] Web UI pro vyhledávání
-- [ ] API endpoint
-- [ ] Docker kontejner
-- [ ] Inkrementální aktualizace
-
-## 👨‍💻 Autor
-
-**Majpuzik**
-Vytvořeno s pomocí Claude Code
-
-## 📜 Licence
-
-MIT License
-
-## 🙏 Poděkování
-
-- Nejvyšší správní soud ČR za veřejně dostupná data
-- Tesseract OCR projekt
-- Python community
+M.A.J. Puzik - 14.-15.10.2025

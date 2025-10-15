@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NSS Crawler - Databáze rozhodnutí</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+        }
+
+        .stat-card h3 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .search-box {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .search-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input[type="text"], select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .results {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .decision-item {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .decision-item:last-child {
+            border-bottom: none;
+        }
+
+        .decision-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+
+        .decision-ecli {
+            font-weight: bold;
+            color: #007bff;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .decision-ecli:hover {
+            text-decoration: underline;
+        }
+
+        .decision-badges {
+            display: flex;
+            gap: 5px;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-secondary {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .decision-title {
+            color: #666;
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+
+        .decision-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+            color: #999;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+        }
+
+        .pagination button {
+            padding: 8px 12px;
+        }
+
+        .pagination button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background: white;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 30px;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 28px;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+
+        .full-text {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .job-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .job-progress {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .job-progress-bar {
+            height: 100%;
+            background: #007bff;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .job-status {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .job-cancel {
+            background: #dc3545;
+            padding: 5px 10px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏛️ NSS Crawler - Databáze rozhodnutí</h1>
+            <div class="stats" id="stats">
+                <div class="stat-card">
+                    <h3>Celkem rozhodnutí</h3>
+                    <div class="value" id="stat-total">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>S plným textem</h3>
+                    <div class="value" id="stat-with-text">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>K stažení</h3>
+                    <div class="value" id="stat-needs-text">-</div>
+                </div>
+            </div>
+        </header>
+
+        <div class="search-box">
+            <div class="search-row">
+                <input type="text" id="search-input" placeholder="Fulltextové vyhledávání (ECLI, název rozhodnutí)...">
+                <button onclick="search()">🔍 Hledat</button>
+            </div>
+            <div class="filters">
+                <select id="filter-year" onchange="loadDecisions()">
+                    <option value="">Všechny roky</option>
+                    <option value="2025">2025</option>
+                    <option value="2024">2024</option>
+                    <option value="2023">2023</option>
+                    <option value="2022">2022</option>
+                    <option value="2021">2021</option>
+                    <option value="2020">2020</option>
+                </select>
+                <select id="filter-text" onchange="loadDecisions()">
+                    <option value="">Text: Vše</option>
+                    <option value="yes">S textem</option>
+                    <option value="no">Bez textu</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="search-box" style="background: #fff3cd; border-left: 4px solid #ffc107;">
+            <h3 style="margin-bottom: 15px;">🔍 Vyhledat v NSS Sbírce</h3>
+            <div class="search-row">
+                <input type="text" id="nss-keywords" placeholder="Klíčová slova (např. dotace eu, stavba zelená plocha)">
+                <input type="number" id="nss-limit" value="10" min="1" max="50" style="width: 100px;">
+                <button onclick="searchNSS()" style="background: #ffc107; color: #000;">🌐 Stáhnout z NSS</button>
+            </div>
+            <p style="margin-top: 10px; font-size: 13px; color: #856404;">
+                Vyhledá rozhodnutí v NSS veřejné sbírce a stáhne je včetně plných textů.
+            </p>
+        </div>
+
+        <div class="search-box" style="background: #d1ecf1; border-left: 4px solid #17a2b8;">
+            <h3 style="margin-bottom: 15px;">📥 Hromadné stahování</h3>
+            <div class="search-row">
+                <button onclick="downloadAllWithoutText()" style="background: #17a2b8;">📥 Stáhnout všechny bez textu</button>
+                <input type="number" id="download-limit" value="50" min="1" max="200" style="width: 100px;" placeholder="Limit">
+            </div>
+            <p style="margin-top: 10px; font-size: 13px; color: #0c5460;">
+                Stáhne plné texty pro rozhodnutí bez textu (max uvedený limit).
+            </p>
+        </div>
+
+        <div class="search-box" id="jobs-panel" style="display:none; background: #e9ecef;">
+            <h3>⚙️ Běžící úlohy</h3>
+            <div id="jobs-container"></div>
+        </div>
+
+        <div class="results">
+            <div id="results-container" class="loading">Načítám...</div>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let currentJobId = null;
+        let jobUpdateInterval = null;
+
+        async function loadStats() {
+            const response = await fetch('/api/stats');
+            const data = await response.json();
+
+            document.getElementById('stat-total').textContent = data.total;
+            document.getElementById('stat-with-text').textContent = data.with_text;
+            document.getElementById('stat-needs-text').textContent = data.needs_text;
+        }
+
+        async function loadDecisions(page = 1) {
+            currentPage = page;
+
+            const search = document.getElementById('search-input').value;
+            const year = document.getElementById('filter-year').value;
+            const hasText = document.getElementById('filter-text').value;
+
+            const params = new URLSearchParams({
+                page: page,
+                per_page: 20,
+                search: search,
+                year: year,
+                has_text: hasText
+            });
+
+            const response = await fetch(`/api/decisions?${params}`);
+            const data = await response.json();
+
+            displayResults(data);
+        }
+
+        function displayResults(data) {
+            const container = document.getElementById('results-container');
+
+            if (data.decisions.length === 0) {
+                container.innerHTML = '<div class="no-results">Žádná rozhodnutí nenalezena</div>';
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = data.decisions.map(d => `
+                <div class="decision-item">
+                    <div class="decision-header">
+                        <div class="decision-ecli" onclick="showDetail(${d.id})">${d.ecli}</div>
+                        <div class="decision-badges">
+                            ${d.has_text ? '<span class="badge badge-success">✅ Text</span>' : '<span class="badge badge-secondary">❌ Bez textu</span>'}
+                            ${d.needs_fulltext ? '<span class="badge badge-warning">🔍 K stažení</span>' : ''}
+                            ${!d.has_text && d.url ? '<button class="btn btn-sm" onclick="event.stopPropagation(); downloadFulltext(\''+d.url+'\', '+d.id+')" style="margin-left: 10px; padding: 3px 8px; font-size: 12px;">📥 Stáhnout text</button>' : ''}
+                        </div>
+                    </div>
+                    <div class="decision-title">${d.title}</div>
+                    <div class="decision-meta">
+                        <span>📅 ${d.date ? d.date.substring(0, 10) : 'Bez data'}</span>
+                        ${d.metadata.spisova_znacka ? `<span>📋 ${d.metadata.spisova_znacka}</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            // Pagination
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = `
+                <button onclick="loadDecisions(${data.page - 1})" ${data.page === 1 ? 'disabled' : ''}>« Předchozí</button>
+                <span>Stránka ${data.page} z ${data.pages}</span>
+                <button onclick="loadDecisions(${data.page + 1})" ${data.page === data.pages ? 'disabled' : ''}>Následující »</button>
+            `;
+        }
+
+        async function showDetail(id) {
+            const response = await fetch(`/api/decision/${id}`);
+            const data = await response.json();
+
+            const modal = document.getElementById('modal');
+            const modalBody = document.getElementById('modal-body');
+
+            modalBody.innerHTML = `
+                <h2>${data.ecli}</h2>
+                <p><strong>${data.title}</strong></p>
+                <p>📅 Datum: ${data.date ? data.date.substring(0, 10) : 'Neznámé'}</p>
+                ${data.metadata.spisova_znacka ? `<p>📋 Spisová značka: ${data.metadata.spisova_znacka}</p>` : ''}
+                ${data.url ? `<p>🔗 <a href="${data.url}" target="_blank">Odkaz na vyhledávač</a></p>` : ''}
+
+                ${data.full_text ? `
+                    <h3>Plný text:</h3>
+                    <div class="full-text">${data.full_text.substring(0, 5000)}${data.full_text.length > 5000 ? '...' : ''}</div>
+                ` : '<p><em>Plný text není k dispozici</em></p>'}
+            `;
+
+            modal.style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        function search() {
+            loadDecisions(1);
+        }
+
+        document.getElementById('search-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                search();
+            }
+        });
+
+        window.onclick = (e) => {
+            const modal = document.getElementById('modal');
+            if (e.target === modal) {
+                closeModal();
+            }
+        };
+
+        async function searchNSS() {
+            const keywords = document.getElementById('nss-keywords').value.trim();
+            const limit = parseInt(document.getElementById('nss-limit').value);
+
+            if (!keywords) {
+                alert('Zadejte klíčová slova');
+                return;
+            }
+
+            if (!confirm(`Vyhledat "${keywords}" v NSS Sbírce (max ${limit} výsledků)?\n\nStahování může trvat několik minut.`)) {
+                return;
+            }
+
+            // Zachovat celý řetězec jako jeden term
+            const keywordsList = [keywords];
+
+            try {
+                const response = await fetch('/api/search_nss', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({keywords: keywordsList, limit: limit})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentJobId = data.job_id;
+
+                    // Spustit sledování
+                    if (!jobUpdateInterval) {
+                        jobUpdateInterval = setInterval(loadJobs, 2000);
+                    }
+                    loadJobs();
+
+                    alert(data.message + '\n\nSledujte průběh v sekci "Běžící úlohy".');
+                } else {
+                    alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+                }
+            } catch (e) {
+                alert('Chyba při komunikaci se serverem: ' + e.message);
+            }
+        }
+
+        async function downloadFulltext(url, decisionId) {
+            try {
+                const response = await fetch('/api/download_single', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url, decision_id: decisionId })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Spustit sledování
+                    if (!jobUpdateInterval) {
+                        jobUpdateInterval = setInterval(loadJobs, 2000);
+                    }
+                    loadJobs();
+
+                    alert('Stahování spuštěno!\n\nSledujte průběh v sekci "Běžící úlohy".');
+
+                    // Po dokončení obnovit seznam
+                    setTimeout(() => loadDecisions(currentPage), 5000);
+                } else {
+                    alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+                }
+            } catch (e) {
+                alert('Chyba při komunikaci se serverem: ' + e.message);
+            }
+        }
+
+        async function downloadAllWithoutText() {
+            const limit = parseInt(document.getElementById('download-limit').value);
+
+            if (!confirm(`Stáhnout plné texty pro až ${limit} rozhodnutí bez textu?\n\nStahování může trvat dlouho.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/download_all_without_text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ limit: limit })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Spustit sledování
+                    if (!jobUpdateInterval) {
+                        jobUpdateInterval = setInterval(loadJobs, 2000);
+                    }
+                    loadJobs();
+
+                    alert(data.message + '\n\nSledujte průběh v sekci "Běžící úlohy".');
+                } else {
+                    alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+                }
+            } catch (e) {
+                alert('Chyba při komunikaci se serverem: ' + e.message);
+            }
+        }
+
+        async function downloadMarked() {
+            if (!confirm('Stáhnout plné texty pro označená rozhodnutí?\n\nStahování může trvat několik minut.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/download_marked');
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(data.message + '\n\nObnovte stránku za několik minut pro zobrazení výsledků.');
+                } else {
+                    alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+                }
+            } catch (e) {
+                alert('Chyba při komunikaci se serverem: ' + e.message);
+            }
+        }
+
+        async function loadJobs() {
+            try {
+                const response = await fetch('/api/jobs');
+                const data = await response.json();
+
+                const activeJobs = data.jobs.filter(j => j.status === 'running');
+                const panel = document.getElementById('jobs-panel');
+                const container = document.getElementById('jobs-container');
+
+                if (activeJobs.length === 0) {
+                    panel.style.display = 'none';
+                    return;
+                }
+
+                panel.style.display = 'block';
+
+                container.innerHTML = activeJobs.map(job => {
+                    const percent = job.total > 0 ? Math.round((job.progress / job.total) * 100) : 0;
+                    return `
+                        <div class="job-item">
+                            <div class="job-header">
+                                <strong>${job.description}</strong>
+                                <button class="job-cancel" onclick="cancelJob('${job.job_id}')">❌ Zrušit</button>
+                            </div>
+                            <div class="job-progress">
+                                <div class="job-progress-bar" style="width: ${percent}%">${percent}%</div>
+                            </div>
+                            <div class="job-status">
+                                ${job.current_item}<br>
+                                Zpracováno: ${job.progress}/${job.total} |
+                                Úspěšně staženo: ${job.results_count} |
+                                Čas: ${Math.round(job.elapsed_seconds)}s
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (e) {
+                console.error('Error loading jobs:', e);
+            }
+        }
+
+        async function cancelJob(jobId) {
+            if (!confirm('Opravdu zrušit tuto úlohu?')) return;
+
+            try {
+                const response = await fetch(`/api/job/${jobId}/cancel`, {method: 'POST'});
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Úloha zrušena');
+                    loadJobs();
+                }
+            } catch (e) {
+                alert('Chyba při rušení: ' + e.message);
+            }
+        }
+
+        // Načíst při startu
+        loadStats();
+        loadDecisions();
+
+        // Spustit sledování jobů
+        setInterval(loadJobs, 3000);
+    </script>
+</body>
+</html>
